@@ -31,7 +31,8 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToSoftwareUpdate: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -284,9 +285,8 @@ fun SettingsScreen(
                 }
                 item {
                     SettingsSection("ABOUT") {
-                        SettingsActionItem("App version", "1.0.0 (Build 1)", onClick = {
-                            Toast.makeText(context, "Next Toppers v1.0.0 is up-to-date", Toast.LENGTH_SHORT).show()
-                        })
+                        SettingsActionItem("App version", "1.0.0 (Build 1)", onClick = onNavigateToSoftwareUpdate)
+                        SettingsActionItem("Software update", "Check for system updates", onClick = onNavigateToSoftwareUpdate)
                         SettingsActionItem("Privacy Policy", "Read our terms of data handling", onClick = {
                             showPrivacyDialog = true
                         })

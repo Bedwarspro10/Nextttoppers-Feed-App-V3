@@ -100,6 +100,7 @@ object Chat : Screen("chat", "Chat", Icons.AutoMirrored.Filled.Chat)
     object Wallet : Screen("wallet", "Wallet", Icons.Filled.AccountBalanceWallet)
     object Settings : Screen("settings", "Settings", Icons.Filled.Settings)
     object Downloads : Screen("downloads", "Downloads", Icons.Filled.Download)
+    object SoftwareUpdate : Screen("software_update", "Software Update", Icons.Filled.Settings)
 }
 
 val BottomNavItems = listOf(
@@ -423,6 +424,16 @@ com.example.feature.home.HomeScreen(
                     factory = com.example.feature.settings.SettingsViewModel.provideFactory(appContainer)
                 )
                 com.example.feature.settings.SettingsScreen(
+                    viewModel = viewModel,
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToSoftwareUpdate = { navController.navigate(Screen.SoftwareUpdate.route) }
+                )
+            }
+            composable(Screen.SoftwareUpdate.route) {
+                val viewModel: com.example.feature.update.SoftwareUpdateViewModel = viewModel(
+                    factory = com.example.feature.update.SoftwareUpdateViewModel.provideFactory(appContainer)
+                )
+                com.example.feature.update.SoftwareUpdateScreen(
                     viewModel = viewModel,
                     onNavigateBack = { navController.popBackStack() }
                 )
