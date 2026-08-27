@@ -31,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
@@ -217,13 +219,36 @@ fun ChatScreen(
                 // Scenario 4: Successful verification! Load secure WebView container
                 idTokenState != null -> {
                     val idToken = idTokenState!!
-                    
-                    // Formulate URL depending on selected handoff mode
-                    val finalUrl = remember(idToken) {
-                        if (USE_POST_METHOD) {
-                            "$CHAT_WEBSITE_URL/auth-handoff"
-                        } else {
-                            "$CHAT_WEBSITE_URL/auth-handoff#idToken=${URLEncoder.encode(idToken, "UTF-8")}"
+                    val finalUrl = CHAT_WEBSITE_URL
+                    val coroutineScope = rememberCoroutineScope()
+                    var tokenInjected by remember { mutableStateOf(false) }
+
+                    fun startTokenInjectionPolling(webView: WebView) {
+                        if (tokenInjected) return
+                        coroutineScope.launch {
+                            var attempts = 0
+                            val maxAttempts = 30
+                            val escapedToken = org.json.JSONObject.quote(idToken)
+                            while (attempts < maxAttempts) {
+                                if (tokenInjected) break
+                                webView.evaluateJavascript("typeof window.__NT_SET_FIREBASE_ID_TOKEN__ === 'function'") { result ->
+                                    if (result == "true") {
+                                        Log.d("ChatWebView", "Found window.__NT_SET_FIREBASE_ID_TOKEN__. Injecting token...")
+                                        webView.evaluateJavascript("window.__NT_SET_FIREBASE_ID_TOKEN__($escapedToken);") {
+                                            Log.d("ChatWebView", "window.__NT_SET_FIREBASE_ID_TOKEN__ called successfully.")
+                                        }
+                                        tokenInjected = true
+                                    } else {
+                                        Log.d("ChatWebView", "window.__NT_SET_FIREBASE_ID_TOKEN__ not found yet. Attempt ${attempts + 1}/$maxAttempts")
+                                    }
+                                }
+                                if (tokenInjected) break
+                                delay(500)
+                                attempts++
+                            }
+                            if (!tokenInjected) {
+                                Log.e("ChatWebView", "Failed to find window.__NT_SET_FIREBASE_ID_TOKEN__ after maximum retries.")
+                            }
                         }
                     }
 
@@ -271,6 +296,7 @@ fun ChatScreen(
                                         Log.d("ChatWebView", "onPageStarted: loading path: $safeUrl")
                                         isPageLoading = true
                                         webErrorState = null
+                                        tokenInjected = false
                                     }
 
                                     override fun onPageFinished(view: WebView?, url: String?) {
@@ -278,6 +304,9 @@ fun ChatScreen(
                                         val safeUrl = url?.substringBefore('#') ?: ""
                                         Log.d("ChatWebView", "onPageFinished: path loaded successfully: $safeUrl")
                                         isPageLoading = false
+                                        if (view != null && url != null && url.startsWith(CHAT_WEBSITE_URL)) {
+                                            startTokenInjectionPolling(view)
+                                        }
                                     }
 
                                     override fun onReceivedError(
@@ -324,15 +353,8 @@ fun ChatScreen(
                         update = { webView ->
                             if (!hasLoadedUrl) {
                                 hasLoadedUrl = true
-                                val safeLogUrl = finalUrl.substringBefore('#')
-                                if (USE_POST_METHOD) {
-                                    Log.d("ChatWebView", "First load: posting token to $safeLogUrl")
-                                    val postParams = "idToken=${URLEncoder.encode(idToken, "UTF-8")}"
-                                    webView.postUrl(finalUrl, postParams.toByteArray(StandardCharsets.UTF_8))
-                                } else {
-                                    Log.d("ChatWebView", "First load: loading URL with hash token to $safeLogUrl")
-                                    webView.loadUrl(finalUrl)
-                                }
+                                Log.d("ChatWebView", "First load: loading URL $finalUrl")
+                                webView.loadUrl(finalUrl)
                             }
                         },
                         modifier = Modifier.fillMaxSize()
