@@ -1,0 +1,6 @@
+{
+  "name": "Next Toppers Feed",
+  "description": "Ed-tech application with courses, gamification, leaderboard, quizzes, and community chat.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
