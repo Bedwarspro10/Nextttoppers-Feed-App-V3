@@ -131,7 +131,9 @@ class CourseViewModel(
             return false // Handled by Activity/NavHost
         }
         
-        currentStack.removeLast()
+        if (currentStack.isNotEmpty()) {
+            currentStack.removeAt(currentStack.size - 1)
+        }
         val newCurrentNodes = if (currentStack.isEmpty()) {
             _uiState.value.rootNodes
         } else {

@@ -1,6 +1,7 @@
 package com.example.feature.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -235,12 +236,25 @@ fun StatCard(
     label: String,
     value: String
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.94f else 1f,
+        animationSpec = spring(dampingRatio = 0.5f, stiffness = 300f)
+    )
+
     Card(
-        modifier = modifier,
+        modifier = modifier
+            .scale(scale)
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(28.dp)
+            ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
+            containerColor = Color.White.copy(alpha = 0.08f)
         ),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(28.dp)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -278,10 +292,15 @@ fun BannersSection(banners: List<Banner>) {
                 modifier = Modifier
                     .width(300.dp)
                     .height(140.dp)
+                    .border(
+                        width = 1.dp,
+                        color = Color.White.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(28.dp)
+                    )
                     .clickable { /* Handle click URL if needed */ },
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(28.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
                 )
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -318,10 +337,16 @@ fun AnnouncementsSection(announcements: List<Announcement>) {
         modifier = Modifier.padding(bottom = 8.dp)
     )
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(28.dp)
+            ),
+        shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f)
+            containerColor = Color.White.copy(alpha = 0.05f)
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -336,12 +361,12 @@ fun AnnouncementsSection(announcements: List<Announcement>) {
                             text = announcement.title,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                            color = Color.White
                         )
                         Text(
                             text = announcement.message,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
+                            color = Color.White.copy(alpha = 0.7f),
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -350,7 +375,7 @@ fun AnnouncementsSection(announcements: List<Announcement>) {
                 if (index < announcements.size - 1) {
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 12.dp),
-                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.1f)
+                        color = Color.White.copy(alpha = 0.1f)
                     )
                 }
             }
@@ -367,8 +392,8 @@ fun SubjectCard(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.96f else 1f,
-        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.7f, stiffness = 400f)
+        targetValue = if (isPressed) 0.94f else 1f,
+        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.5f, stiffness = 300f)
     )
     
     Card(
@@ -377,10 +402,15 @@ fun SubjectCard(
         modifier = modifier
             .fillMaxWidth()
             .height(88.dp)
-            .scale(scale),
-        shape = RoundedCornerShape(16.dp),
+            .scale(scale)
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.15f),
+                shape = RoundedCornerShape(28.dp)
+            ),
+        shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
+            containerColor = Color.White.copy(alpha = 0.08f)
         )
     ) {
         Row(

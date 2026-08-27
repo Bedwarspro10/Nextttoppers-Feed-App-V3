@@ -37,6 +37,21 @@ class UserRepository(
         }
     }
 
+    /**
+     * Fetches a user's public profile by uid. Used to resolve avatar/display name
+     * for the other participant in a private chat. Read-only, additive helper —
+     * does not change any existing collection, field, or query.
+     */
+    suspend fun getUserById(uid: String): AppUser? = withContext(Dispatchers.IO) {
+        if (uid.isBlank()) return@withContext null
+        val snapshot = firestore.collection("users").document(uid).get().await()
+        if (snapshot.exists()) {
+            snapshot.toObject(AppUser::class.java)?.copy(uid = uid)
+        } else {
+            null
+        }
+    }
+
     suspend fun getWalletData(): CoinWalletData = withContext(Dispatchers.IO) {
         val currentUser = auth.currentUser ?: return@withContext CoinWalletData()
         val walletRef = firestore.collection("coinWallet").document(currentUser.uid)

@@ -16,8 +16,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -33,8 +35,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Format
 import androidx.media3.common.TrackGroup
@@ -106,6 +112,7 @@ fun VideoPlayerScreen(
     var currentSpeed by remember { mutableStateOf(1f) }
     var showQualityMenu by remember { mutableStateOf(false) }
     var videoQualities by remember { mutableStateOf(listOf<Format>()) }
+    var showHyperOsSettings by remember { mutableStateOf(false) }
     
     var showDownloadSheet by remember { mutableStateOf(false) }
     var availableDownloadQualities by remember { mutableStateOf(listOf<String>()) }
@@ -503,6 +510,19 @@ fun VideoPlayerScreen(
                     }
                 }
 
+                // HyperOS Settings Backdrop to capture taps on screen to dismiss the settings menu
+                if (showHyperOsSettings) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(Unit) {
+                                detectTapGestures {
+                                    showHyperOsSettings = false
+                                }
+                            }
+                    )
+                }
+
                 // Bottom Controls
                 Column(
                     modifier = Modifier
@@ -510,7 +530,7 @@ fun VideoPlayerScreen(
                         .align(Alignment.BottomCenter)
                         .padding(bottom = if (isFullscreen) 32.dp else 16.dp, start = 16.dp, end = 16.dp)
                 ) {
-                    // Seekbar
+                    // Seekbar Row with duration text and video controls
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -525,45 +545,17 @@ fun VideoPlayerScreen(
                         
                         Row(verticalAlignment = Alignment.CenterVertically) {
 
-                            Box {
-                                TextButton(onClick = { if (videoQualities.isNotEmpty()) showQualityMenu = true }) {
-                                    Icon(Icons.Default.Settings, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Quality", color = Color.White, fontSize = 12.sp)
-                                }
-                                DropdownMenu(
-                                    expanded = showQualityMenu,
-                                    onDismissRequest = { showQualityMenu = false }
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text("Auto") },
-                                        onClick = {
-                                            exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
-                                                .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
-                                                .build()
-                                            showQualityMenu = false
-                                        }
-                                    )
-                                    videoQualities.forEach { format ->
-                                        DropdownMenuItem(
-                                            text = { Text("${format.height}p") },
-                                            onClick = {
-                                                val trackGroup = exoPlayer.currentTracks.groups.find { group ->
-                                                    (0 until group.length).any { i -> group.getTrackFormat(i).height == format.height }
-                                                }
-                                                if (trackGroup != null) {
-                                                    val override = TrackSelectionOverride(trackGroup.mediaTrackGroup, listOf(0))
-                                                    exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
-                                                        .setOverrideForType(override)
-                                                        .build()
-                                                }
-                                                showQualityMenu = false
-                                            }
-                                        )
-                                    }
-                                }
+                            // Settings small icon with click listener for origin-based HyperOS animation
+                            IconButton(onClick = { 
+                                showHyperOsSettings = !showHyperOsSettings 
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings, 
+                                    contentDescription = "Settings", 
+                                    tint = Color.White, 
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
-
 
                             if (lectureId.isNotEmpty() && downloadRepository != null) {
                                 Box {
@@ -582,26 +574,6 @@ fun VideoPlayerScreen(
                                         Icon(if (isAlreadyDownloaded) Icons.Default.Check else Icons.Default.Download, contentDescription = "Download", tint = Color.White, modifier = Modifier.size(16.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(if (isAlreadyDownloaded) "Downloaded" else "Download", color = Color.White, fontSize = 12.sp)
-                                    }
-                                }
-                            }
-                                                        Box {
-                                TextButton(onClick = { showSpeedMenu = true }) {
-                                    Text("${currentSpeed}×", color = Color.White, fontSize = 12.sp)
-                                }
-                                DropdownMenu(
-                                    expanded = showSpeedMenu,
-                                    onDismissRequest = { showSpeedMenu = false }
-                                ) {
-                                    listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f).forEach { speed ->
-                                        DropdownMenuItem(
-                                            text = { Text("${speed}×") },
-                                            onClick = {
-                                                currentSpeed = speed
-                                                exoPlayer.playbackParameters = PlaybackParameters(speed)
-                                                showSpeedMenu = false
-                                            }
-                                        )
                                     }
                                 }
                             }
@@ -631,25 +603,168 @@ fun VideoPlayerScreen(
                         }
                     }
                     
-                    Slider(
-                        value = if (duration > 0) (currentPosition.toFloat() / duration.toFloat()) else 0f,
-                        onValueChange = { value ->
-                            val target = (value * duration).toLong()
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Custom YouTube-style timeline / seekbar with played, buffered, unplayed tracks
+                    YoutubeTimeline(
+                        currentPosition = currentPosition,
+                        bufferedPosition = bufferedPosition,
+                        duration = duration,
+                        onSeek = { target ->
                             currentPosition = target
+                            exoPlayer.seekTo(target)
                             showControls = true
-                        },
-                        onValueChangeFinished = {
-                            exoPlayer.seekTo(currentPosition)
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(24.dp),
-                        colors = SliderDefaults.colors(
-                            thumbColor = MaterialTheme.colorScheme.primary,
-                            activeTrackColor = MaterialTheme.colorScheme.primary,
-                            inactiveTrackColor = Color.White.copy(alpha = 0.3f)
-                        )
+                            .height(24.dp)
                     )
+                }
+
+                // Custom HyperOS Settings Panel (Originates from the Bottom Right settings icon)
+                val hyperOsProgress by animateFloatAsState(
+                    targetValue = if (showHyperOsSettings) 1f else 0f,
+                    animationSpec = spring(
+                        dampingRatio = 0.72f, 
+                        stiffness = Spring.StiffnessMedium
+                    )
+                )
+
+                if (hyperOsProgress > 0.01f) {
+                    Card(
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xEC1E293B) // Rich elegant slate glass
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(bottom = if (isFullscreen) 76.dp else 60.dp, end = 24.dp)
+                            .width(280.dp)
+                            .graphicsLayer {
+                                // Scale and pivot originating exactly from the bottom-right settings gear icon coordinates
+                                transformOrigin = TransformOrigin(1f, 1f)
+                                scaleX = hyperOsProgress
+                                scaleY = hyperOsProgress
+                                alpha = hyperOsProgress
+                            }
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = {} // Block click leakage through the card
+                            )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            Text(
+                                text = "Video Settings",
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                fontSize = 14.sp
+                            )
+                            
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Divider(color = Color.White.copy(alpha = 0.12f))
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // 1. Playback Speed Choice
+                            Text(
+                                text = "PLAYBACK SPEED",
+                                color = Color.White.copy(alpha = 0.6f),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                listOf(0.5f, 1.0f, 1.5f, 2.0f).forEach { speed ->
+                                    val isSelected = currentSpeed == speed
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(if (isSelected) Color(0xFFFF0000) else Color.White.copy(alpha = 0.08f))
+                                            .clickable {
+                                                currentSpeed = speed
+                                                exoPlayer.playbackParameters = PlaybackParameters(speed)
+                                            }
+                                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = "${speed}x",
+                                            color = Color.White,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // 2. Playback Quality Choice
+                            Text(
+                                text = "QUALITY ADJUSTMENT",
+                                color = Color.White.copy(alpha = 0.6f),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            
+                            val qualityOptions = remember(videoQualities) {
+                                val list = mutableListOf("Auto")
+                                videoQualities.forEach { list.add("${it.height}p") }
+                                list.distinct()
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                qualityOptions.take(4).forEach { qOpt ->
+                                    val isSelected = if (qOpt == "Auto") {
+                                        exoPlayer.trackSelectionParameters.overrides.isEmpty()
+                                    } else {
+                                        val heightVal = qOpt.removeSuffix("p").toIntOrNull() ?: 0
+                                        exoPlayer.trackSelectionParameters.overrides.isNotEmpty()
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(if (isSelected) Color(0xFFFF0000) else Color.White.copy(alpha = 0.08f))
+                                            .clickable {
+                                                if (qOpt == "Auto") {
+                                                    exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
+                                                        .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                                                        .build()
+                                                } else {
+                                                    val heightVal = qOpt.removeSuffix("p").toIntOrNull() ?: 0
+                                                    val trackGroup = exoPlayer.currentTracks.groups.find { group ->
+                                                        (0 until group.length).any { i -> group.getTrackFormat(i).height == heightVal }
+                                                    }
+                                                    if (trackGroup != null) {
+                                                        val override = TrackSelectionOverride(trackGroup.mediaTrackGroup, listOf(0))
+                                                        exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
+                                                            .setOverrideForType(override)
+                                                            .build()
+                                                    }
+                                                }
+                                            }
+                                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = qOpt,
+                                            color = Color.White,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -765,6 +880,119 @@ fun formatDuration(ms: Long): String {
         String.format("%d:%02d:%02d", hours, minutes, seconds)
     } else {
         String.format("%02d:%02d", minutes, seconds)
+    }
+}
+
+@Composable
+fun YoutubeTimeline(
+    currentPosition: Long,
+    bufferedPosition: Long,
+    duration: Long,
+    onSeek: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var dragProgress by remember { mutableStateOf<Float?>(null) }
+    val displayProgress = if (duration > 0) {
+        dragProgress ?: (currentPosition.toFloat() / duration.toFloat())
+    } else 0f
+
+    val isScrubbing = dragProgress != null
+    val thumbRadius by animateDpAsState(
+        targetValue = if (isScrubbing) 8.dp else 5.dp,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 300f),
+        label = "thumbRadius"
+    )
+
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(24.dp)
+            .pointerInput(duration) {
+                detectTapGestures(
+                    onPress = { offset ->
+                        val widthPx = size.width
+                        if (widthPx > 0) {
+                            val frac = (offset.x / widthPx).coerceIn(0f, 1f)
+                            dragProgress = frac
+                            onSeek((frac * duration).toLong())
+                            tryAwaitRelease()
+                            dragProgress = null
+                        }
+                    }
+                )
+            }
+            .pointerInput(duration) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        val widthPx = size.width
+                        if (widthPx > 0) {
+                            dragProgress = (offset.x / widthPx).coerceIn(0f, 1f)
+                        }
+                    },
+                    onDragEnd = {
+                        dragProgress?.let { frac ->
+                            onSeek((frac * duration).toLong())
+                        }
+                        dragProgress = null
+                    },
+                    onDragCancel = {
+                        dragProgress = null
+                    },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        val widthPx = size.width
+                        if (widthPx > 0) {
+                            val currentX = change.position.x
+                            val frac = (currentX / widthPx).coerceIn(0f, 1f)
+                            dragProgress = frac
+                            onSeek((frac * duration).toLong())
+                        }
+                    }
+                )
+            }
+    ) {
+        val width = constraints.maxWidth.toFloat()
+        val height = constraints.maxHeight.toFloat()
+        val centerY = height / 2f
+        
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val trackHeight = 4.dp.toPx()
+            
+            // 1. Unplayed Track (Background - translucent white)
+            drawRoundRect(
+                color = Color.White.copy(alpha = 0.22f),
+                topLeft = Offset(0f, centerY - trackHeight / 2f),
+                size = Size(width, trackHeight),
+                cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
+            )
+
+            // 2. Buffered Track (Middle - lighter translucent white)
+            if (duration > 0) {
+                val bufferedFrac = (bufferedPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+                drawRoundRect(
+                    color = Color.White.copy(alpha = 0.42f),
+                    topLeft = Offset(0f, centerY - trackHeight / 2f),
+                    size = Size(width * bufferedFrac, trackHeight),
+                    cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
+                )
+            }
+
+            // 3. Played Track (Foreground - YouTube Red)
+            val playedWidth = width * displayProgress.coerceIn(0f, 1f)
+            drawRoundRect(
+                color = Color(0xFFFF0000), // YouTube Red
+                topLeft = Offset(0f, centerY - trackHeight / 2f),
+                size = Size(playedWidth, trackHeight),
+                cornerRadius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
+            )
+
+            // 4. Thumb (YouTube Red Circle)
+            drawCircle(
+                color = Color(0xFFFF0000),
+                radius = thumbRadius.toPx(),
+                center = Offset(playedWidth, centerY)
+            )
+        }
     }
 }
 

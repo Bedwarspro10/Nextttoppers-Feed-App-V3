@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.core.designsystem.GlobalQuickMenu
 import com.example.data.models.ContentNode
 
@@ -162,7 +163,7 @@ fun ContentNodeItem(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (isPending) MaterialTheme.colorScheme.surface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
         )
@@ -174,11 +175,19 @@ fun ContentNodeItem(
             val url = node.document.resolvedUrl ?: ""
             val isLecture = url.contains(".m3u8") || url.contains(".mp4") || url.contains("youtube")
             
-            Box(modifier = Modifier.size(48.dp)) {
-                when {
-                    node.isFolder -> com.example.core.designsystem.FolderIcon3D(modifier = Modifier.fillMaxSize())
-                    isLecture -> com.example.core.designsystem.VideoIcon3D(modifier = Modifier.fillMaxSize())
-                    else -> com.example.core.designsystem.PdfIcon3D(modifier = Modifier.fillMaxSize())
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                        shape = RoundedCornerShape(16.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (node.isFolder) {
+                    Text("📂", fontSize = 28.sp)
+                } else {
+                    Text("🗃️", fontSize = 28.sp)
                 }
             }
             

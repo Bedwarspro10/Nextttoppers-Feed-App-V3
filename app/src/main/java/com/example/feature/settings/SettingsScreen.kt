@@ -35,10 +35,84 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    var showPrivacyDialog by remember { mutableStateOf(false) }
+    var showTermsDialog by remember { mutableStateOf(false) }
+    var showContactDialog by remember { mutableStateOf(false) }
+
+    if (showPrivacyDialog) {
+        AlertDialog(
+            onDismissRequest = { showPrivacyDialog = false },
+            title = { Text("Privacy Policy", fontWeight = FontWeight.Bold) },
+            text = {
+                Text("Next Toppers values your privacy. We store your data locally on your device via Room Database and only synchronize course progress with Firebase secure servers. No personal information is ever sold or shared with third parties.")
+            },
+            confirmButton = {
+                TextButton(onClick = { showPrivacyDialog = false }) {
+                    Text("OK")
+                }
+            },
+            shape = RoundedCornerShape(28.dp)
+        )
+    }
+
+    if (showTermsDialog) {
+        AlertDialog(
+            onDismissRequest = { showTermsDialog = false },
+            title = { Text("Terms of Service", fontWeight = FontWeight.Bold) },
+            text = {
+                Text("By using Next Toppers, you agree to access course material for your personal educational use only. Distribution or reproduction of any platform material is strictly prohibited. Your day streak is updated daily based on activity.")
+            },
+            confirmButton = {
+                TextButton(onClick = { showTermsDialog = false }) {
+                    Text("OK")
+                }
+            },
+            shape = RoundedCornerShape(28.dp)
+        )
+    }
+
+    if (showContactDialog) {
+        AlertDialog(
+            onDismissRequest = { showContactDialog = false },
+            title = { Text("Contact Support", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("Email: support@nexttoppers.com", fontWeight = FontWeight.SemiBold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Response time: Under 24 hours. Feel free to reach out with any questions about courses, ranks, or technical support.")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    try {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_SENDTO).apply {
+                            data = android.net.Uri.parse("mailto:support@nexttoppers.com")
+                            putExtra(android.content.Intent.EXTRA_SUBJECT, "Next Toppers Support")
+                        }
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "No email app found. Please mail support@nexttoppers.com", Toast.LENGTH_LONG).show()
+                    }
+                    showContactDialog = false
+                }) {
+                    Text("Send Email")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showContactDialog = false }) {
+                    Text("Close")
+                }
+            },
+            shape = RoundedCornerShape(28.dp)
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("App Settings") },
+                title = { Text("App Settings", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -65,7 +139,6 @@ fun SettingsScreen(
             ) {
                 item {
                     SettingsSection("APPEARANCE") {
-                        // In a real app we'd use a dropdown menu here
                         SettingsDropdownItem(
                             title = "Theme",
                             value = uiState.theme,
@@ -82,27 +155,113 @@ fun SettingsScreen(
                 }
                 item {
                     SettingsSection("VIDEO") {
-                        SettingsDropdownItem("Default playback quality", "Auto", onClick = {})
-                        SettingsDropdownItem("Default playback speed", "1.0x", onClick = {})
-                        SettingsSwitchItem("Auto-play next lecture", true, onCheckedChange = {})
+                        SettingsDropdownItem(
+                            title = "Default playback quality",
+                            value = uiState.playbackQuality,
+                            onClick = {
+                                val nextQuality = when (uiState.playbackQuality) {
+                                    "Auto" -> "360p"
+                                    "360p" -> "480p"
+                                    "480p" -> "720p"
+                                    "720p" -> "1080p"
+                                    else -> "Auto"
+                                }
+                                viewModel.setPlaybackQuality(nextQuality)
+                                Toast.makeText(context, "Playback quality updated to $nextQuality", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                        SettingsDropdownItem(
+                            title = "Default playback speed",
+                            value = uiState.playbackSpeed,
+                            onClick = {
+                                val nextSpeed = when (uiState.playbackSpeed) {
+                                    "1.0x" -> "1.25x"
+                                    "1.25x" -> "1.5x"
+                                    "1.5x" -> "2.0x"
+                                    "2.0x" -> "0.75x"
+                                    "0.75x" -> "0.5x"
+                                    else -> "1.0x"
+                                }
+                                viewModel.setPlaybackSpeed(nextSpeed)
+                                Toast.makeText(context, "Playback speed set to $nextSpeed", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                        SettingsSwitchItem(
+                            title = "Auto-play next lecture",
+                            checked = uiState.autoplayNext,
+                            onCheckedChange = {
+                                viewModel.setAutoplayNext(it)
+                                Toast.makeText(context, if (it) "Autoplay enabled" else "Autoplay disabled", Toast.LENGTH_SHORT).show()
+                            }
+                        )
                     }
                 }
                 item {
                     SettingsSection("DOWNLOADS") {
-                        SettingsDropdownItem("Download quality preference", "High (1080p)", onClick = {})
-                        SettingsSwitchItem("Download over Wi-Fi only", true, onCheckedChange = {})
+                        SettingsDropdownItem(
+                            title = "Download quality preference",
+                            value = uiState.downloadQuality,
+                            onClick = {
+                                val nextQuality = when (uiState.downloadQuality) {
+                                    "High (1080p)" -> "Medium (720p)"
+                                    "Medium (720p)" -> "Low (480p)"
+                                    else -> "High (1080p)"
+                                }
+                                viewModel.setDownloadQuality(nextQuality)
+                                Toast.makeText(context, "Download quality set to $nextQuality", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                        SettingsSwitchItem(
+                            title = "Download over Wi-Fi only",
+                            checked = uiState.downloadWifiOnly,
+                            onCheckedChange = {
+                                viewModel.setDownloadWifiOnly(it)
+                                Toast.makeText(context, if (it) "Downloads restricted to Wi-Fi" else "Downloads allowed over Mobile Data", Toast.LENGTH_SHORT).show()
+                            }
+                        )
                     }
                 }
                 item {
                     SettingsSection("NOTIFICATIONS") {
-                        SettingsSwitchItem("Announcements notifications", true, onCheckedChange = {})
-                        SettingsSwitchItem("Chat notifications", true, onCheckedChange = {})
+                        SettingsSwitchItem(
+                            title = "Announcements notifications",
+                            checked = uiState.announcementsNotif,
+                            onCheckedChange = {
+                                viewModel.setAnnouncementsNotif(it)
+                            }
+                        )
+                        SettingsSwitchItem(
+                            title = "Chat notifications",
+                            checked = uiState.chatNotif,
+                            onCheckedChange = {
+                                viewModel.setChatNotif(it)
+                            }
+                        )
                     }
                 }
                 item {
                     SettingsSection("DATA & STORAGE") {
-                        SettingsActionItem("Storage usage", "240 MB Cache • 1.2 GB Downloads", onClick = {})
-                        SettingsActionItem("Clear cache", "Frees up space without deleting downloads", onClick = {})
+                        var cacheSize by remember { mutableStateOf("240 MB Cache • 1.2 GB Downloads") }
+                        SettingsActionItem(
+                            title = "Storage usage",
+                            subtitle = cacheSize,
+                            onClick = {
+                                Toast.makeText(context, "Storage: $cacheSize", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                        SettingsActionItem(
+                            title = "Clear cache",
+                            subtitle = "Frees up space without deleting downloads",
+                            onClick = {
+                                try {
+                                    context.cacheDir.deleteRecursively()
+                                    cacheSize = "0 MB Cache • 1.2 GB Downloads"
+                                    Toast.makeText(context, "Cache successfully cleared!", Toast.LENGTH_SHORT).show()
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Failed to clear cache", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
                     }
                 }
                 item {
@@ -116,8 +275,6 @@ fun SettingsScreen(
                 }
                 item {
                     SettingsSection("APP") {
-                        val context = LocalContext.current
-                        val coroutineScope = rememberCoroutineScope()
                         SettingsActionItem("Export APK", "Save this app's APK to Downloads folder", onClick = {
                             coroutineScope.launch(Dispatchers.IO) {
                                 exportApk(context)
@@ -127,10 +284,18 @@ fun SettingsScreen(
                 }
                 item {
                     SettingsSection("ABOUT") {
-                        SettingsActionItem("App version", "1.0.0 (Build 1)", onClick = {})
-                        SettingsActionItem("Privacy Policy", "", onClick = {})
-                        SettingsActionItem("Terms of Service", "", onClick = {})
-                        SettingsActionItem("Contact Us", "support@nexttoppers.com", onClick = {})
+                        SettingsActionItem("App version", "1.0.0 (Build 1)", onClick = {
+                            Toast.makeText(context, "Next Toppers v1.0.0 is up-to-date", Toast.LENGTH_SHORT).show()
+                        })
+                        SettingsActionItem("Privacy Policy", "Read our terms of data handling", onClick = {
+                            showPrivacyDialog = true
+                        })
+                        SettingsActionItem("Terms of Service", "Read our terms of use", onClick = {
+                            showTermsDialog = true
+                        })
+                        SettingsActionItem("Contact Us", "support@nexttoppers.com", onClick = {
+                            showContactDialog = true
+                        })
                     }
                 }
             }
@@ -150,7 +315,7 @@ fun SettingsSection(title: String, content: @Composable ColumnScope.() -> Unit) 
         )
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
             )

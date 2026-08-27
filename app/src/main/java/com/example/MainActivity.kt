@@ -52,6 +52,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        askNotificationPermission()
         enableEdgeToEdge()
         val appContainer = (application as MainApplication).container
         
