@@ -5,7 +5,10 @@ package com.example.feature.chat
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.net.Uri
+import android.util.Log
+import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
@@ -34,7 +37,7 @@ import java.nio.charset.StandardCharsets
 /**
  * CONFIGURATION CONSTANTS FOR SECURE FIREBASE CHAT WEBVIEW HANDOFF
  */
-const val CHAT_WEBSITE_URL = "https://mychatwebsite.com" // Change this to your actual Chat website domain
+const val CHAT_WEBSITE_URL = "https://nexttopper-feed-chat-site.pages.dev" // Change this to your actual Chat website domain
 const val USE_POST_METHOD = false // Set to true to use HTTP POST, false to use URL hash fragment handoff
 
 @Composable
@@ -60,18 +63,31 @@ fun ChatScreen(
     // Helper function to fetch the Firebase ID token securely
     fun fetchIdToken() {
         if (currentUser == null) {
+            Log.e("ChatWebView", "currentUser is NULL. Cannot fetch token.")
             isFetchingToken = false
             return
         }
+        Log.d("ChatWebView", "currentUser exists: uid=${currentUser.uid}")
         isFetchingToken = true
         authErrorState = null
-        currentUser.getIdToken(false)
+        
+        // Force token refresh (true) to guarantee that the website receives a 100% valid, unexpired ID token
+        currentUser.getIdToken(true)
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
-                    idTokenState = task.result?.token
-                    authErrorState = null
+                    val token = task.result?.token
+                    if (!token.isNullOrEmpty()) {
+                        Log.d("ChatWebView", "getIdToken() succeeded! Token obtained successfully (length: ${token.length})")
+                        idTokenState = token
+                        authErrorState = null
+                    } else {
+                        Log.e("ChatWebView", "getIdToken() returned an empty token.")
+                        authErrorState = "Retrieved token is empty."
+                    }
                 } else {
-                    authErrorState = task.exception?.localizedMessage ?: "Failed to retrieve Firebase ID Token"
+                    val exceptionMsg = task.exception?.localizedMessage ?: "Unknown token retrieval error"
+                    Log.e("ChatWebView", "getIdToken() failed: $exceptionMsg")
+                    authErrorState = exceptionMsg
                 }
                 isFetchingToken = false
             }
@@ -226,21 +242,41 @@ fun ChatScreen(
                                 settings.domStorageEnabled = true
                                 settings.databaseEnabled = true
                                 settings.cacheMode = WebSettings.LOAD_DEFAULT
+                                settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                                 
                                 // Enable persistent Cookies for sessions
                                 val cookieManager = CookieManager.getInstance()
                                 cookieManager.setAcceptCookie(true)
                                 cookieManager.setAcceptThirdPartyCookies(this, true)
 
+                                // Route all Javascript console logs directly to Android logcat for debugging
+                                webChromeClient = object : WebChromeClient() {
+                                    override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                                        consoleMessage?.let {
+                                            val logMsg = "[JS Console] ${it.message()} at ${it.sourceId()}:${it.lineNumber()}"
+                                            if (it.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                                                Log.e("ChatWebViewConsole", logMsg)
+                                            } else {
+                                                Log.d("ChatWebViewConsole", logMsg)
+                                            }
+                                        }
+                                        return true
+                                    }
+                                }
+
                                 webViewClient = object : WebViewClient() {
                                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                                         super.onPageStarted(view, url, favicon)
+                                        val safeUrl = url?.substringBefore('#') ?: ""
+                                        Log.d("ChatWebView", "onPageStarted: loading path: $safeUrl")
                                         isPageLoading = true
                                         webErrorState = null
                                     }
 
                                     override fun onPageFinished(view: WebView?, url: String?) {
                                         super.onPageFinished(view, url)
+                                        val safeUrl = url?.substringBefore('#') ?: ""
+                                        Log.d("ChatWebView", "onPageFinished: path loaded successfully: $safeUrl")
                                         isPageLoading = false
                                     }
 
@@ -250,10 +286,11 @@ fun ChatScreen(
                                         error: WebResourceError?
                                     ) {
                                         super.onReceivedError(view, request, error)
-                                        // Ignore subresource errors, only trigger on main frame failures
                                         if (request?.isForMainFrame == true) {
                                             isPageLoading = false
-                                            webErrorState = error?.description?.toString() ?: "Connection failed"
+                                            val errorMsg = error?.description?.toString() ?: "Connection failed"
+                                            Log.e("ChatWebView", "onReceivedError on main frame: code=${error?.errorCode}, desc=$errorMsg, url=${request.url}")
+                                            webErrorState = errorMsg
                                         }
                                     }
 
@@ -263,13 +300,21 @@ fun ChatScreen(
                                     ): Boolean {
                                         val url = request?.url?.toString() ?: return false
                                         val parsedUri = Uri.parse(url)
-                                        val allowedHost = Uri.parse(CHAT_WEBSITE_URL).host
+                                        val host = parsedUri.host ?: ""
+                                        val allowedHost = Uri.parse(CHAT_WEBSITE_URL).host ?: ""
                                         
-                                        // Strict security restriction to allowed domain/host only!
-                                        return if (parsedUri.host == allowedHost) {
-                                            false // Load inside WebView
+                                        // Include allowed host, plus standard Firebase Authentication helper domains
+                                        val isAllowed = host.endsWith(allowedHost) ||
+                                                host.endsWith("firebaseapp.com") ||
+                                                host.endsWith("googleapis.com") ||
+                                                host.endsWith("google.com")
+                                        
+                                        Log.d("ChatWebView", "shouldOverrideUrlLoading: host=$host, allowedHost=$allowedHost, isAllowed=$isAllowed")
+                                        return if (isAllowed) {
+                                            false // Load inside the WebView
                                         } else {
-                                            true // Block or drop external links
+                                            Log.w("ChatWebView", "shouldOverrideUrlLoading blocked external URL: $url")
+                                            true // Prevent loading outside
                                         }
                                     }
                                 }
@@ -279,10 +324,13 @@ fun ChatScreen(
                         update = { webView ->
                             if (!hasLoadedUrl) {
                                 hasLoadedUrl = true
+                                val safeLogUrl = finalUrl.substringBefore('#')
                                 if (USE_POST_METHOD) {
+                                    Log.d("ChatWebView", "First load: posting token to $safeLogUrl")
                                     val postParams = "idToken=${URLEncoder.encode(idToken, "UTF-8")}"
                                     webView.postUrl(finalUrl, postParams.toByteArray(StandardCharsets.UTF_8))
                                 } else {
+                                    Log.d("ChatWebView", "First load: loading URL with hash token to $safeLogUrl")
                                     webView.loadUrl(finalUrl)
                                 }
                             }
